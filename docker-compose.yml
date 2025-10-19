@@ -1,0 +1,127 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mcnft
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_SECURITY_PLUGIN=true
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mcnft
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AI_SERVICE_URL: http://ai:8500
+      OPENSEARCH_NODE: http://opensearch:9200
+      NODE_ENV: development
+      PRISMA_CLI_BINARY_TARGETS: linux-musl-arm64-openssl-3.0.x
+      ETHEREUM_MARKETPLACE_ADDRESS: ${ETHEREUM_MARKETPLACE_ADDRESS:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
+      POLYGON_MARKETPLACE_ADDRESS: ${POLYGON_MARKETPLACE_ADDRESS:-0x0000000000000000000000000000000000000000}
+      ARBITRUM_MARKETPLACE_ADDRESS: ${ARBITRUM_MARKETPLACE_ADDRESS:-0x0000000000000000000000000000000000000000}
+      ONFT_ETH: ${ONFT_ETH:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}
+      ONFT_POLYGON: ${ONFT_POLYGON:-0x0000000000000000000000000000000000000000}
+      ONFT_ARBITRUM: ${ONFT_ARBITRUM:-0x0000000000000000000000000000000000000000}
+      WORMHOLE_BRIDGE_ETH: ${WORMHOLE_BRIDGE_ETH:-0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9}
+      WORMHOLE_BRIDGE_POLYGON: ${WORMHOLE_BRIDGE_POLYGON:-0x0000000000000000000000000000000000000000}
+      WORMHOLE_BRIDGE_ARBITRUM: ${WORMHOLE_BRIDGE_ARBITRUM:-0x0000000000000000000000000000000000000000}
+      BUNDLE_COMPOSER_ETH: ${BUNDLE_COMPOSER_ETH:-0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0}
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - api-node-modules:/app/apps/api/node_modules
+    command: |
+      sh -c "cd /app && pnpm install --frozen-lockfile && pnpm --filter @apps/api prisma:generate && pnpm --filter @apps/api prisma:deploy && pnpm --filter @apps/api build && TS_NODE_PROJECT=/app/apps/api/tsconfig.json node -r ./apps/api/node_modules/tsconfig-paths/register apps/api/dist/main.js"
+
+  ai:
+    build:
+      context: services/ai
+      dockerfile: Dockerfile
+    ports:
+      - "8500:8500"
+    volumes:
+      - ./services/ai/src:/app/src
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8500/healthz')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/web.Dockerfile
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: development
+      API_URL: http://api:4000/graphql
+      NEXT_PUBLIC_API_URL: http://localhost:4000/graphql
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: 7ce3c9e24196603ee89b5c4d74614b78
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - web-node-modules:/app/apps/web/node_modules
+    command: |
+      sh -c "cd /app && pnpm install --frozen-lockfile && pnpm --filter @apps/web dev"
+
+volumes:
+  pgdata:
+  opensearch-data:
+  api-node-modules:
+  web-node-modules:

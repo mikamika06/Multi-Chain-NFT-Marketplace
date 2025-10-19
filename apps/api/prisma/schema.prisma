@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  wallet    String   @unique
+  email     String?  @unique
+  role      UserRole @default(BUYER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  listings  Listing[]
+  bids      Bid[]
+}
+
+model Collection {
+  id           String    @id @default(uuid())
+  chainId      String
+  address      String
+  slug         String    @unique
+  name         String
+  verified     Boolean   @default(false)
+  royaltyBps   Int       @default(0)
+  creatorWallet String
+  tokens       Token[]
+
+  @@unique([chainId, address])
+  @@index([verified])
+}
+
+model Token {
+  id            String   @id @default(uuid())
+  collectionId  String
+  tokenId       String
+  chainId       String
+  owner         String
+  metadataUri   String
+  imageUrl      String?
+  attributesJson Json?
+  mintedAt      DateTime @default(now())
+  listings      Listing[]
+  sales         Sale[]
+  crossChainMaps CrossChainMap[]
+  bridgeEvents  BridgeEvent[]
+  valuations    AIValuation[]
+  bundleItems   BundleItem[]
+  fraudFlags    FraudFlag[] @relation("TokenFraudFlags")
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, tokenId])
+  @@index([chainId, owner])
+  @@index([collectionId])
+}
+
+model Listing {
+  id            String       @id @default(uuid())
+  tokenPk       String
+  type          ListingType
+  price         Decimal      @db.Decimal(65, 18)
+  startPrice    Decimal?     @db.Decimal(65, 18)
+  endPrice      Decimal?     @db.Decimal(65, 18)
+  startTs       DateTime
+  endTs         DateTime
+  reservePrice  Decimal?     @db.Decimal(65, 18)
+  status        ListingStatus
+  sellerId      String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  bids          Bid[]
+  sales         Sale[]
+  bundleItems   BundleItem[]
+
+  token Token @relation(fields: [tokenPk], references: [id], onDelete: Cascade)
+  seller User? @relation(fields: [sellerId], references: [id])
+
+  @@index([status, endTs])
+  @@index([tokenPk])
+  @@index([status, type])
+  @@index([createdAt])
+}
+
+model Bid {
+  id        String    @id @default(uuid())
+  listingId String
+  bidderId  String?
+  bidder    String
+  amount    Decimal   @db.Decimal(65, 18)
+  chainId   String
+  txHash    String?
+  status    BidStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [bidderId], references: [id])
+
+  @@index([listingId])
+}
+
+model Sale {
+  id        String   @id @default(uuid())
+  tokenPk   String
+  price     Decimal  @db.Decimal(65, 18)
+  seller    String
+  buyer     String
+  chainId   String
+  txHash    String
+  ts        DateTime @default(now())
+
+  listingId String?
+  listing   Listing? @relation(fields: [listingId], references: [id])
+  token     Token    @relation(fields: [tokenPk], references: [id], onDelete: Cascade)
+
+  @@index([ts])
+  @@index([buyer])
+  @@index([seller])
+}
+
+model CrossChainMap {
+  id             String       @id @default(uuid())
+  tokenPk        String
+  canonicalChain String
+  canonicalAddr  String
+  mirrorChain    String
+  mirrorAddr     String
+  mode           BridgeMode
+
+  token Token @relation(fields: [tokenPk], references: [id], onDelete: Cascade)
+
+  @@index([canonicalChain, canonicalAddr])
+  @@index([mirrorChain, mirrorAddr])
+}
+
+model BridgeEvent {
+  id         String      @id @default(uuid())
+  tokenPk    String
+  srcChain   String
+  dstChain   String
+  protocol   BridgeProtocol
+  messageId  String
+  status     BridgeStatus
+  eta        DateTime?
+  fee        Decimal @db.Decimal(65, 18)
+  createdAt  DateTime @default(now())
+
+  token Token @relation(fields: [tokenPk], references: [id], onDelete: Cascade)
+
+  @@index([srcChain, dstChain])
+  @@index([status])
+}
+
+model AIValuation {
+  tokenPk      String   @id
+  fairPrice    Decimal  @db.Decimal(65, 18)
+  confidence   Float
+  featuresJson Json?
+  modelVersion String   @default("baseline-v1")
+  expiresAt    DateTime?
+  updatedAt    DateTime @updatedAt
+
+  token Token @relation(fields: [tokenPk], references: [id], onDelete: Cascade)
+
+  @@index([modelVersion])
+}
+
+model FraudFlag {
+  id         String       @id @default(uuid())
+  entityType FraudEntity
+  entityId   String
+  flag       String
+  score      Float
+  reason     String
+  createdAt  DateTime @default(now())
+  resolved   Boolean  @default(false)
+  reviewerId String?
+  resolutionNote String?
+  resolvedAt DateTime?
+  tokenPk   String?
+
+  token Token? @relation("TokenFraudFlags", fields: [tokenPk], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([resolved])
+}
+
+model AIModelVersion {
+  id          String   @id @default(uuid())
+  modelType   String
+  version     String
+  description String?
+  active      Boolean  @default(true)
+  ttlSeconds  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([modelType, version])
+  @@index([modelType, active])
+}
+
+model BundleItem {
+  id        String   @id @default(uuid())
+  bundleId  String
+  tokenPk   String
+  quantity  Int      @default(1)
+
+  listing Listing @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  token   Token   @relation(fields: [tokenPk], references: [id], onDelete: Cascade)
+
+  @@index([bundleId])
+}
+
+model WorkerCursor {
+  id        String   @id
+  cursor    String?
+  updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  actor     String
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([actor])
+}
+
+enum UserRole {
+  CREATOR
+  BUYER
+  VERIFIER
+  ADMIN
+}
+
+enum ListingType {
+  FIXED
+  AUCTION_EN
+  AUCTION_DUTCH
+  BUNDLE
+}
+
+enum ListingStatus {
+  PENDING
+  ACTIVE
+  SOLD
+  CANCELLED
+  EXPIRED
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REFUNDED
+  CANCELLED
+}
+
+enum BridgeMode {
+  LOCK_MINT
+  BURN_MINT
+}
+
+enum BridgeProtocol {
+  LAYERZERO
+  WORMHOLE
+}
+
+enum BridgeStatus {
+  CREATED
+  IN_FLIGHT
+  COMPLETED
+  FAILED
+}
+
+enum FraudEntity {
+  COLLECTION
+  LISTING
+  TOKEN
+  USER
+}
