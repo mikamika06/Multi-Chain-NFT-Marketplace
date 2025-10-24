@@ -14,6 +14,7 @@ const nextConfig = {
     ],
   },
   transpilePackages: ['wagmi', '@rainbow-me/rainbowkit'],
+  output: 'standalone',
 };
 
 module.exports = nextConfig;

@@ -6,8 +6,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // Use internal Docker network URL
-    const apiUrl = process.env.API_URL || 'http://api:4000/graphql';
+    const apiUrl = process.env.API_URL || 'http://localhost:4000/graphql';
     
     const response = await fetch(apiUrl, {
       method: 'POST',

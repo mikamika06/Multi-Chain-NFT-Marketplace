@@ -1,0 +1,322 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type User {
+  id: ID!
+
+  """Wallet address"""
+  wallet: String!
+
+  """Email address"""
+  email: String
+
+  """User role"""
+  role: UserRole!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""User role in the system"""
+enum UserRole {
+  CREATOR
+  BUYER
+  VERIFIER
+  ADMIN
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type AuthResponse {
+  """JWT access token"""
+  accessToken: String!
+
+  """Authenticated user"""
+  user: User!
+}
+
+type Collection {
+  id: ID!
+  chainId: String!
+  address: String!
+  slug: String!
+  name: String!
+  verified: Boolean!
+  royaltyBps: Int!
+  creatorWallet: String!
+}
+
+type Token {
+  id: ID!
+  collectionId: String!
+  tokenId: String!
+  chainId: String!
+  owner: String!
+  metadataUri: String!
+  imageUrl: String!
+  attributesJson: String!
+  mintedAt: String!
+  collection: Collection
+}
+
+type BundleItem {
+  id: ID!
+  listingId: String!
+  tokenPk: String!
+  quantity: Int!
+  token: Token
+}
+
+type Listing {
+  id: ID!
+  tokenPk: String!
+  type: ListingType!
+  price: String!
+  startPrice: String
+  endPrice: String
+  startTs: String!
+  endTs: String!
+  reservePrice: String
+  status: String!
+  token: Token
+  bundleItems: [BundleItem!]
+}
+
+enum ListingType {
+  FIXED
+  AUCTION_EN
+  AUCTION_DUTCH
+  BUNDLE
+}
+
+type Sale {
+  id: ID!
+  tokenPk: String!
+  price: String!
+  seller: String!
+  buyer: String!
+  chainId: String!
+  txHash: String!
+  ts: String!
+  token: Token
+}
+
+type Bid {
+  id: ID!
+  listingId: String!
+  bidder: String!
+  amount: String!
+  chainId: String!
+  createdAt: String!
+  status: String!
+  listing: Listing
+}
+
+type BridgeQuote {
+  dstChain: String!
+  estimatedFee: String!
+  estimatedTimeSeconds: Int!
+}
+
+type BridgeEvent {
+  id: ID!
+  tokenPk: String!
+  srcChain: String!
+  dstChain: String!
+  protocol: String!
+  messageId: String!
+  status: String!
+  fee: Float!
+  createdAt: String!
+  token: Token
+}
+
+type Valuation {
+  tokenPk: String!
+  fairPrice: String!
+  confidence: Float!
+  updatedAt: String!
+  modelVersion: String!
+  features: String
+  expiresAt: String
+  token: Token
+}
+
+type SimilarityResult {
+  tokenPk: String!
+  score: Float!
+  token: Token
+}
+
+type FraudFlagEntity {
+  id: String!
+  entityType: FraudEntity!
+  entityId: String!
+  flag: String!
+  score: Float!
+  reason: String!
+  resolved: Boolean!
+  createdAt: String!
+  reviewerId: String
+  resolutionNote: String
+  resolvedAt: String
+  token: Token
+}
+
+"""Entity types supported for fraud detection workflows."""
+enum FraudEntity {
+  COLLECTION
+  LISTING
+  TOKEN
+  USER
+}
+
+type Query {
+  """Generate nonce for SIWE authentication"""
+  getNonce: String!
+  collections(filter: CollectionFilterInput): [Collection!]!
+  tokens(filter: TokenFilterInput): [Token!]!
+  token(id: String!): Token
+  listings: [Listing!]!
+  listing(id: String!): Listing
+  bids(listingId: String!): [Bid!]!
+  recentSales(limit: Int): [Sale!]!
+  bridgeQuote(input: BridgeQuoteInput!): BridgeQuote!
+  bridgeEvents: [BridgeEvent!]!
+  bridgeEventsByToken(tokenPk: String!): [BridgeEvent!]!
+  valuation(tokenPk: String!): Valuation
+  similarTokens(tokenPk: String!, topK: Int = 5): [SimilarityResult!]!
+  fraudFlags(entityType: FraudEntity, entityId: String, resolved: Boolean): [FraudFlagEntity!]!
+}
+
+input CollectionFilterInput {
+  chainId: String
+  search: String
+}
+
+input TokenFilterInput {
+  collectionId: String
+  owner: String
+}
+
+input BridgeQuoteInput {
+  tokenId: String!
+  dstChain: String!
+  priorityMultiplier: Float! = 0.3
+}
+
+type Mutation {
+  """Login with SIWE message and signature"""
+  login(input: LoginInput!): AuthResponse!
+  createFixedListing(input: CreateListingInput!): Listing!
+  createEnglishAuctionListing(input: CreateEnglishAuctionInput!): Listing!
+  createDutchAuctionListing(input: CreateDutchAuctionInput!): Listing!
+  createBundleListing(input: CreateBundleListingInput!): Listing!
+  buyNow(input: BuyNowInput!): Sale!
+  placeBid(input: PlaceBidInput!): Bid!
+  withdrawOverbid(input: WithdrawBidInput!): String!
+  transferCrossChain(input: TransferCrossChainInput!): BridgeEvent!
+  requestValuation(input: RequestValuationInput!): Valuation!
+  requestFraudScore(input: RequestFraudScoreInput!): FraudFlagEntity!
+  resolveFraudFlag(id: String!, reviewerId: String!, resolutionNote: String): FraudFlagEntity!
+}
+
+input LoginInput {
+  """SIWE message"""
+  message: String!
+
+  """Signature of the SIWE message"""
+  signature: String!
+}
+
+input CreateListingInput {
+  tokenPk: String!
+  type: ListingType!
+  price: String!
+  startTs: String!
+  endTs: String!
+  reservePrice: String
+}
+
+input CreateEnglishAuctionInput {
+  tokenPk: String!
+  startPrice: String!
+  reservePrice: String
+  startTs: String!
+  endTs: String!
+}
+
+input CreateDutchAuctionInput {
+  tokenPk: String!
+  startPrice: String!
+  endPrice: String!
+  startTs: String!
+  endTs: String!
+}
+
+input CreateBundleListingInput {
+  bundleTokenPk: String!
+  price: String!
+  startTs: String!
+  endTs: String!
+  items: [BundleListingItemInput!]!
+}
+
+input BundleListingItemInput {
+  tokenPk: String!
+  quantity: Int
+}
+
+input BuyNowInput {
+  listingId: String!
+  buyer: String!
+
+  """Paid amount in ETH string representation"""
+  amount: String!
+
+  """Chain identifier (e.g. 1, 137, 42161)"""
+  chainId: String!
+}
+
+input PlaceBidInput {
+  listingId: String!
+  bidder: String!
+
+  """Bid amount in ETH string representation"""
+  amount: String!
+
+  """Chain identifier (e.g. 1, 137, 42161)"""
+  chainId: String!
+}
+
+input WithdrawBidInput {
+  listingId: String!
+  bidder: String!
+}
+
+input TransferCrossChainInput {
+  tokenPk: String!
+  dstChain: String!
+  protocol: String! = "LAYERZERO"
+  feeEstimate: String
+  clientRequestId: String
+}
+
+input RequestValuationInput {
+  tokenPk: String!
+  forceRefresh: Boolean
+  clientRequestId: String
+}
+
+input RequestFraudScoreInput {
+  entityType: FraudEntity!
+  entityId: String!
+  price: Float
+  collectionAgeDays: Int
+  suspiciousMetadata: Boolean
+  duplicateTxCount: Int
+  clientRequestId: String
+}
